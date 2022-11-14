@@ -5,22 +5,26 @@ import (
     "sort"
     "strings"
 
+    "github.com/asaskevich/govalidator"
     "github.com/camry/g/gutil"
     "gorm.io/gorm"
 )
 
 type Converter struct {
-    serverDbConfig *DbConfig
-    serverDb       *gorm.DB
-    serverTable    *Table
+    serverDbConfig       *DbConfig
+    serverDb             *gorm.DB
+    serverTable          *Table
+    serverTableColumns   []string
+    serverTableColumnMap map[string]string
 }
 
 // NewConverter 新建转换器。
 func NewConverter(serverDbConfig *DbConfig, serverDb *gorm.DB, serverTable *Table) *Converter {
     return &Converter{
-        serverDbConfig: serverDbConfig,
-        serverDb:       serverDb,
-        serverTable:    serverTable,
+        serverDbConfig:       serverDbConfig,
+        serverDb:             serverDb,
+        serverTable:          serverTable,
+        serverTableColumnMap: make(map[string]string),
     }
 }
 
@@ -71,14 +75,16 @@ func (c *Converter) createTable() {
             if serverColumn != serverColumnData[serverTableColumnResult.RowsAffected-1] || serverStatisticsResult.RowsAffected > 0 {
                 dot = ","
             }
-
+            dataType := c.getDataType(serverColumn.DataType)
             createSql := fmt.Sprintf("  %s %s%s",
                 serverColumn.ColumnName,
-                c.getDataType(serverColumn.DataType),
+                dataType,
                 c.getNotNull(serverColumn.IsNullable),
             )
-
             createTableSql = append(createTableSql, fmt.Sprintf("%s%s", createSql, dot))
+
+            c.serverTableColumns = append(c.serverTableColumns, serverColumn.ColumnName)
+            c.serverTableColumnMap[serverColumn.ColumnName] = dataType
         }
 
         // KEY ...
@@ -121,6 +127,12 @@ func (c *Converter) createTable() {
             createTableSql = append(createTableSql, fmt.Sprintf("%s", strings.Join(createUniqueIndexSql, "\n")))
         }
 
+        insertSql := c.insert()
+
+        if len(insertSql) > 0 {
+            createTableSql = append(createTableSql, fmt.Sprintf("%s", strings.Join(insertSql, "\n")))
+        }
+
         lock.Lock()
         sqlTableNames = append(sqlTableNames, c.serverTable.TableName)
         sqlTableMap[c.serverTable.TableName] = strings.Join(createTableSql, "\n")
@@ -129,8 +141,42 @@ func (c *Converter) createTable() {
 }
 
 // insert SQLite INSERT INTO 语句。
-func (c *Converter) insert() {
-
+func (c *Converter) insert() []string {
+    var insertSql []string
+    var rows []map[string]any
+    result := c.serverDb.Table(fmt.Sprintf("`%s`.`%s`", c.serverDbConfig.Database, c.serverTable.TableName)).Find(&rows)
+    if result.RowsAffected > 0 {
+        var ks, kv []string
+        for _, columnName := range c.serverTableColumns {
+            ks = append(ks, columnName)
+        }
+        for _, row := range rows {
+            var vs []string
+            for _, columnName := range c.serverTableColumns {
+                if columnDataType, ok := c.serverTableColumnMap[columnName]; ok {
+                    if columnValue, ok1 := row[columnName]; ok1 {
+                        if columnValue == nil {
+                            vs = append(vs, "NULL")
+                        } else {
+                            switch columnDataType {
+                            case "INTEGER", "REAL":
+                                vs = append(vs, govalidator.ToString(columnValue))
+                            case "TEXT", "BLOB":
+                                vs = append(vs, fmt.Sprintf("\"%s\"", govalidator.ToString(columnValue)))
+                            }
+                        }
+                    }
+                }
+            }
+            kv = append(kv, fmt.Sprintf("(%s)", strings.Join(vs, ",")))
+        }
+        insertSql = append(insertSql, fmt.Sprintf("INSERT INTO %s (%s) VALUES %s;",
+            c.serverTable.TableName,
+            strings.Join(ks, ","),
+            strings.Join(kv, ","),
+        ))
+    }
+    return insertSql
 }
 
 // getDataType SQLite 数据类型。
