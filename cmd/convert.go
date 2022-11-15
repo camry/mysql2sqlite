@@ -7,6 +7,7 @@ import (
 
     "github.com/asaskevich/govalidator"
     "github.com/camry/g/gutil"
+    "github.com/golang-module/carbon/v2"
     "gorm.io/gorm"
 )
 
@@ -15,7 +16,12 @@ type Converter struct {
     serverDb             *gorm.DB
     serverTable          *Table
     serverTableColumns   []string
-    serverTableColumnMap map[string]string
+    serverTableColumnMap map[string]*MySQL2SQLiteColumn
+}
+
+type MySQL2SQLiteColumn struct {
+    DataType       string
+    SQLiteDataType string
 }
 
 // NewConverter 新建转换器。
@@ -24,7 +30,7 @@ func NewConverter(serverDbConfig *DbConfig, serverDb *gorm.DB, serverTable *Tabl
         serverDbConfig:       serverDbConfig,
         serverDb:             serverDb,
         serverTable:          serverTable,
-        serverTableColumnMap: make(map[string]string),
+        serverTableColumnMap: make(map[string]*MySQL2SQLiteColumn),
     }
 }
 
@@ -71,16 +77,21 @@ func (c *Converter) create() {
 
         // COLUMNS ...
         for _, serverColumn := range serverColumnData {
-            dataType := c.getDataType(serverColumn.DataType)
+            dataType := strings.ToUpper(serverColumn.DataType)
+            sqliteDataType := c.getDataType(dataType)
+
             createSql := fmt.Sprintf("  `%s` %s%s",
                 serverColumn.ColumnName,
-                dataType,
+                sqliteDataType,
                 c.getNotNull(serverColumn.IsNullable),
             )
             createTableColumnSql = append(createTableColumnSql, createSql)
 
             c.serverTableColumns = append(c.serverTableColumns, serverColumn.ColumnName)
-            c.serverTableColumnMap[serverColumn.ColumnName] = dataType
+            c.serverTableColumnMap[serverColumn.ColumnName] = &MySQL2SQLiteColumn{
+                DataType:       dataType,
+                SQLiteDataType: sqliteDataType,
+            }
         }
 
         // KEY ...
@@ -156,16 +167,21 @@ func (c *Converter) insert() []string {
         for _, row := range rows {
             var vs []string
             for _, columnName := range c.serverTableColumns {
-                if columnDataType, ok := c.serverTableColumnMap[columnName]; ok {
+                if col, ok := c.serverTableColumnMap[columnName]; ok {
                     if columnValue, ok1 := row[columnName]; ok1 {
                         if columnValue == nil {
                             vs = append(vs, "NULL")
                         } else {
-                            switch columnDataType {
+                            switch col.SQLiteDataType {
                             case "INTEGER", "REAL":
                                 vs = append(vs, govalidator.ToString(columnValue))
                             case "TEXT":
-                                vs = append(vs, fmt.Sprintf("'%s'", strings.ReplaceAll(govalidator.ToString(columnValue), "'", "''")))
+                                switch col.DataType {
+                                case "DATE", "TIME", "YEAR", "DATETIME", "TIMESTAMP":
+                                    vs = append(vs, fmt.Sprintf("'%s'", carbon.Parse(govalidator.ToString(columnValue)).ToDateTimeString()))
+                                default:
+                                    vs = append(vs, fmt.Sprintf("'%s'", strings.ReplaceAll(govalidator.ToString(columnValue), "'", "''")))
+                                }
                             case "BLOB":
                                 vs = append(vs, fmt.Sprintf("'%s'", govalidator.ToString(columnValue)))
                             }
@@ -188,34 +204,14 @@ func (c *Converter) insert() []string {
 
 // getDataType SQLite 数据类型。
 func (c *Converter) getDataType(dataType string) string {
-    switch strings.ToUpper(dataType) {
-    case "TINYINT",
-        "SMALLINT",
-        "MEDIUMINT",
-        "INT",
-        "INTEGER",
-        "BIGINT":
+    switch dataType {
+    case "TINYINT", "SMALLINT", "MEDIUMINT", "INT", "INTEGER", "BIGINT":
         return "INTEGER"
-    case "FLOAT",
-        "DOUBLE",
-        "DECIMAL":
+    case "FLOAT", "DOUBLE", "DECIMAL":
         return "REAL"
-    case "DATE",
-        "TIME",
-        "YEAR",
-        "DATETIME",
-        "TIMESTAMP",
-        "CHAR",
-        "VARCHAR",
-        "TINYTEXT",
-        "TEXT",
-        "MEDIUMTEXT",
-        "LONGTEXT":
+    case "DATE", "TIME", "YEAR", "DATETIME", "TIMESTAMP", "CHAR", "VARCHAR", "TINYTEXT", "TEXT", "MEDIUMTEXT", "LONGTEXT":
         return "TEXT"
-    case "TINYBLOB",
-        "BLOB",
-        "MEDIUMBLOB",
-        "LONGBLOB":
+    case "TINYBLOB", "BLOB", "MEDIUMBLOB", "LONGBLOB":
         return "BLOB"
     }
     return "TEXT"

@@ -2,13 +2,13 @@ package cmd
 
 import (
     "fmt"
-    "github.com/camry/g/frame/g"
     "regexp"
     "sort"
     "strconv"
     "strings"
     "sync"
 
+    "github.com/camry/g/frame/g"
     "github.com/spf13/cobra"
     "gorm.io/driver/mysql"
     "gorm.io/gorm"
