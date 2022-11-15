@@ -177,7 +177,13 @@ func (c *Converter) insert() []string {
                                 vs = append(vs, govalidator.ToString(columnValue))
                             case "TEXT":
                                 switch col.DataType {
-                                case "DATE", "TIME", "YEAR", "DATETIME", "TIMESTAMP":
+                                case "DATE":
+                                    vs = append(vs, fmt.Sprintf("'%s'", carbon.Parse(govalidator.ToString(columnValue)).ToDateString()))
+                                case "TIME":
+                                    vs = append(vs, fmt.Sprintf("'%s'", carbon.Parse(govalidator.ToString(columnValue)).ToTimeString()))
+                                case "YEAR":
+                                    vs = append(vs, fmt.Sprintf("'%d'", carbon.Parse(govalidator.ToString(columnValue)).Year()))
+                                case "DATETIME", "TIMESTAMP":
                                     vs = append(vs, fmt.Sprintf("'%s'", carbon.Parse(govalidator.ToString(columnValue)).ToDateTimeString()))
                                 default:
                                     vs = append(vs, fmt.Sprintf("'%s'", strings.ReplaceAll(govalidator.ToString(columnValue), "'", "''")))
