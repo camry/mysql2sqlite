@@ -139,7 +139,7 @@ func (c *Converter) insert() []string {
     var (
         insertSql []string
         offset    = 0
-        limit     = 5000
+        limit     = 2000
     )
 
     for {
