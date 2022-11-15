@@ -35,7 +35,7 @@ func (c *Converter) Start() {
 
     switch c.serverTable.TableType {
     case "BASE TABLE":
-        c.createTable()
+        c.create()
         c.insert()
     case "VIEW":
         // glog.Warnf("表 `%s` 不支持 VIEW 转换。", c.serverTable.TableName)
@@ -44,8 +44,8 @@ func (c *Converter) Start() {
     <-ch
 }
 
-// createTable SQLite CREATE TABLE 语句。
-func (c *Converter) createTable() {
+// create SQLite CREATE TABLE 语句。
+func (c *Converter) create() {
     var (
         serverColumnData     []Column
         serverStatisticsData []Statistic
@@ -242,6 +242,16 @@ func (c *Converter) getPrimaryKey(statisticMap map[int]Statistic) string {
 
 // createUniqueKey SQLite CREATE UNIQUE INDEX 语句。
 func (c *Converter) createUniqueKey(indexName string, statisticMap map[int]Statistic) string {
+    lock.Lock()
+    if idx, ok := existIndexMap[indexName]; ok {
+        idx++
+        existIndexMap[indexName] = idx
+        indexName = fmt.Sprintf("%s%d", indexName, idx)
+    } else {
+        existIndexMap[indexName] = 0
+    }
+    lock.Unlock()
+
     var seqInIndexSort []int
     var columnNames []string
 

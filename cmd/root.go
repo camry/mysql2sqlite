@@ -2,6 +2,7 @@ package cmd
 
 import (
     "fmt"
+    "github.com/camry/g/frame/g"
     "regexp"
     "sort"
     "strconv"
@@ -44,8 +45,9 @@ var (
 
     server        string
     db            string
+    existIndexMap = make(g.MapStrInt)
     sqlTableNames []string
-    sqlTableMap   = make(map[string]string)
+    sqlTableMap   = make(g.MapStrStr)
 
     rootCmd = &cobra.Command{
         Use:     "mysql2sqlite",
