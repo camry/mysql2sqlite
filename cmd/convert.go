@@ -142,10 +142,19 @@ func (c *Converter) create() {
 
 // insert SQLite INSERT INTO 语句。
 func (c *Converter) insert() []string {
-    var insertSql []string
-    var rows []map[string]any
-    result := c.serverDb.Table(fmt.Sprintf("`%s`.`%s`", c.serverDbConfig.Database, c.serverTable.TableName)).Find(&rows)
-    if result.RowsAffected > 0 {
+    var (
+        insertSql []string
+        offset    = 0
+        limit     = 1000
+    )
+
+    for {
+        var rows []map[string]any
+        result := c.serverDb.Table(fmt.Sprintf("`%s`.`%s`", c.serverDbConfig.Database, c.serverTable.TableName)).Offset(offset).Limit(limit).Find(&rows)
+        if result.RowsAffected <= 0 {
+            break
+        }
+
         var ks, kv []string
         for _, columnName := range c.serverTableColumns {
             ks = append(ks, columnName)
@@ -175,6 +184,8 @@ func (c *Converter) insert() []string {
             strings.Join(ks, ","),
             strings.Join(kv, ","),
         ))
+
+        offset += limit
     }
     return insertSql
 }
