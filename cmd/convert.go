@@ -162,7 +162,7 @@ func (c *Converter) insert() []string {
                             case "INTEGER", "REAL":
                                 vs = append(vs, govalidator.ToString(columnValue))
                             case "TEXT", "BLOB":
-                                vs = append(vs, fmt.Sprintf("\"%s\"", govalidator.ToString(columnValue)))
+                                vs = append(vs, fmt.Sprintf("'%s'", govalidator.ToString(columnValue)))
                             }
                         }
                     }
