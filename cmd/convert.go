@@ -64,32 +64,26 @@ func (c *Converter) create() {
             c.serverDbConfig.Database, c.serverTable.TableName,
         )
 
-        var createTableSql, createUniqueIndexSql []string
+        var createTableSql, createTableColumnSql, createUniqueIndexSql []string
 
-        createTableSql = append(createTableSql, fmt.Sprintf("DROP TABLE IF EXISTS %s;", c.serverTable.TableName))
-        createTableSql = append(createTableSql, fmt.Sprintf("CREATE TABLE %s (", c.serverTable.TableName))
+        createTableSql = append(createTableSql, fmt.Sprintf("DROP TABLE IF EXISTS `%s`;", c.serverTable.TableName))
+        createTableSql = append(createTableSql, fmt.Sprintf("CREATE TABLE `%s` (", c.serverTable.TableName))
 
         // COLUMNS ...
         for _, serverColumn := range serverColumnData {
-            var dot = ""
-            if serverColumn != serverColumnData[serverTableColumnResult.RowsAffected-1] || serverStatisticsResult.RowsAffected > 0 {
-                dot = ","
-            }
             dataType := c.getDataType(serverColumn.DataType)
-            createSql := fmt.Sprintf("  %s %s%s",
+            createSql := fmt.Sprintf("  `%s` %s%s",
                 serverColumn.ColumnName,
                 dataType,
                 c.getNotNull(serverColumn.IsNullable),
             )
-            createTableSql = append(createTableSql, fmt.Sprintf("%s%s", createSql, dot))
+            createTableColumnSql = append(createTableColumnSql, createSql)
 
             c.serverTableColumns = append(c.serverTableColumns, serverColumn.ColumnName)
             c.serverTableColumnMap[serverColumn.ColumnName] = dataType
         }
 
         // KEY ...
-        var createKeySql []string
-
         if serverStatisticsResult.RowsAffected > 0 {
             var serverStatisticIndexNameArray []string
             serverStatisticsDataMap := make(map[string]map[int]Statistic)
@@ -111,7 +105,7 @@ func (c *Converter) create() {
             for _, serverIndexName := range serverStatisticIndexNameArray {
                 if 1 != serverStatisticsDataMap[serverIndexName][1].NonUnique {
                     if serverIndexName == "PRIMARY" {
-                        createKeySql = append(createKeySql, fmt.Sprintf("  %s", c.getPrimaryKey(serverStatisticsDataMap[serverIndexName])))
+                        createTableColumnSql = append(createTableColumnSql, fmt.Sprintf("  %s", c.getPrimaryKey(serverStatisticsDataMap[serverIndexName])))
                     } else {
                         createUniqueIndexSql = append(createUniqueIndexSql, c.createUniqueKey(serverIndexName, serverStatisticsDataMap[serverIndexName]))
                     }
@@ -119,8 +113,8 @@ func (c *Converter) create() {
             }
         }
 
-        if len(createKeySql) > 0 {
-            createTableSql = append(createTableSql, strings.Join(createKeySql, ",\n"))
+        if len(createTableColumnSql) > 0 {
+            createTableSql = append(createTableSql, strings.Join(createTableColumnSql, ",\n"))
         }
         createTableSql = append(createTableSql, ");")
         if len(createUniqueIndexSql) > 0 {
@@ -145,7 +139,7 @@ func (c *Converter) insert() []string {
     var (
         insertSql []string
         offset    = 0
-        limit     = 1000
+        limit     = 5000
     )
 
     for {
@@ -157,7 +151,7 @@ func (c *Converter) insert() []string {
 
         var ks, kv []string
         for _, columnName := range c.serverTableColumns {
-            ks = append(ks, columnName)
+            ks = append(ks, fmt.Sprintf("`%s`", columnName))
         }
         for _, row := range rows {
             var vs []string
@@ -170,7 +164,9 @@ func (c *Converter) insert() []string {
                             switch columnDataType {
                             case "INTEGER", "REAL":
                                 vs = append(vs, govalidator.ToString(columnValue))
-                            case "TEXT", "BLOB":
+                            case "TEXT":
+                                vs = append(vs, fmt.Sprintf("'%s'", strings.ReplaceAll(govalidator.ToString(columnValue), "'", "''")))
+                            case "BLOB":
                                 vs = append(vs, fmt.Sprintf("'%s'", govalidator.ToString(columnValue)))
                             }
                         }
@@ -245,7 +241,7 @@ func (c *Converter) getPrimaryKey(statisticMap map[int]Statistic) string {
     sort.Ints(seqInIndexSort)
 
     for _, seqInIndex := range seqInIndexSort {
-        columnNames = append(columnNames, fmt.Sprintf("%s", statisticMap[seqInIndex].ColumnName))
+        columnNames = append(columnNames, fmt.Sprintf("`%s`", statisticMap[seqInIndex].ColumnName))
     }
 
     return fmt.Sprintf("PRIMARY KEY (%s)", strings.Join(columnNames, ","))
@@ -273,8 +269,8 @@ func (c *Converter) createUniqueKey(indexName string, statisticMap map[int]Stati
     sort.Ints(seqInIndexSort)
 
     for _, seqInIndex := range seqInIndexSort {
-        columnNames = append(columnNames, fmt.Sprintf("%s", statisticMap[seqInIndex].ColumnName))
+        columnNames = append(columnNames, fmt.Sprintf("`%s`", statisticMap[seqInIndex].ColumnName))
     }
 
-    return fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s);", indexName, c.serverTable.TableName, strings.Join(columnNames, ","))
+    return fmt.Sprintf("CREATE UNIQUE INDEX `%s` ON `%s` (%s);", indexName, c.serverTable.TableName, strings.Join(columnNames, ","))
 }
