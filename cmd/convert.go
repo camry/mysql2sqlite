@@ -2,6 +2,7 @@ package cmd
 
 import (
     "fmt"
+    "github.com/camry/g/glog"
     "sort"
     "strings"
 
@@ -15,6 +16,7 @@ type Converter struct {
     serverDbConfig       *DbConfig
     serverDb             *gorm.DB
     serverTable          *Table
+    ignoreTable          *IgnoreTable
     serverTableColumns   []string
     serverTableColumnMap map[string]*MySQL2SQLiteColumn
 }
@@ -25,11 +27,12 @@ type MySQL2SQLiteColumn struct {
 }
 
 // NewConverter 新建转换器。
-func NewConverter(serverDbConfig *DbConfig, serverDb *gorm.DB, serverTable *Table) *Converter {
+func NewConverter(serverDbConfig *DbConfig, serverDb *gorm.DB, serverTable *Table, ignoreTable *IgnoreTable) *Converter {
     return &Converter{
         serverDbConfig:       serverDbConfig,
         serverDb:             serverDb,
         serverTable:          serverTable,
+        ignoreTable:          ignoreTable,
         serverTableColumnMap: make(map[string]*MySQL2SQLiteColumn),
     }
 }
@@ -77,6 +80,10 @@ func (c *Converter) create() {
 
         // COLUMNS ...
         for _, serverColumn := range serverColumnData {
+            if gutil.InArray(serverColumn.ColumnName, c.ignoreTable.Columns) {
+                continue
+            }
+
             dataType := strings.ToUpper(serverColumn.DataType)
             sqliteDataType := c.getDataType(dataType)
 
@@ -243,6 +250,9 @@ func (c *Converter) getPrimaryKey(statisticMap map[int]Statistic) string {
     sort.Ints(seqInIndexSort)
 
     for _, seqInIndex := range seqInIndexSort {
+        if gutil.InArray(statisticMap[seqInIndex].ColumnName, c.ignoreTable.Columns) {
+            glog.Fatalf(`PRIMARY KEY Column %s is not ignore.`, statisticMap[seqInIndex].ColumnName)
+        }
         columnNames = append(columnNames, fmt.Sprintf("`%s`", statisticMap[seqInIndex].ColumnName))
     }
 
@@ -271,6 +281,9 @@ func (c *Converter) createUniqueKey(indexName string, statisticMap map[int]Stati
     sort.Ints(seqInIndexSort)
 
     for _, seqInIndex := range seqInIndexSort {
+        if gutil.InArray(statisticMap[seqInIndex].ColumnName, c.ignoreTable.Columns) {
+            glog.Fatalf(`UNIQUE INDEX Column %s is not ignore.`, statisticMap[seqInIndex].ColumnName)
+        }
         columnNames = append(columnNames, fmt.Sprintf("`%s`", statisticMap[seqInIndex].ColumnName))
     }
 

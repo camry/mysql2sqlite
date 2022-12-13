@@ -1,0 +1,10 @@
+# Ignore Table Column Config.
+ignores:
+  - table: base_skill_picker
+  - table: base_skill_level
+    columns:
+      - skill_id
+  - table: base_buff
+    columns:
+      - conflict_tags
+      - conflict_self

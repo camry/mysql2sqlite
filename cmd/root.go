@@ -2,6 +2,8 @@ package cmd
 
 import (
     "fmt"
+    "gopkg.in/yaml.v3"
+    "os"
     "regexp"
     "sort"
     "strconv"
@@ -30,12 +32,22 @@ func init() {
 
     rootCmd.Flags().StringVarP(&server, "server", "s", "", "指定服务器。(格式: <user>:<password>@<host>:<port>)")
     rootCmd.Flags().StringVarP(&db, "db", "d", "", "指定数据库。")
+    rootCmd.Flags().StringVarP(&cfgPath, "config", "c", "", "指定配置文件路径。")
 
     cobra.CheckErr(rootCmd.MarkFlagRequired("server"))
     cobra.CheckErr(rootCmd.MarkFlagRequired("db"))
 }
 
 func initConfig() {
+}
+
+type Config struct {
+    Ignores []*IgnoreTable `yaml:"ignores"`
+}
+
+type IgnoreTable struct {
+    Table   string   `yaml:"table"`
+    Columns []string `yaml:"columns"`
 }
 
 var (
@@ -45,6 +57,7 @@ var (
 
     server        string
     db            string
+    cfgPath       string
     existIndexMap = make(g.MapStrInt)
     sqlTableNames []string
     sqlTableMap   = make(g.MapStrStr)
@@ -52,7 +65,7 @@ var (
     rootCmd = &cobra.Command{
         Use:     "mysql2sqlite",
         Short:   "MySQL convert to SQLite3.",
-        Version: "v1.0.0",
+        Version: "v1.0.1",
         Run: func(cmd *cobra.Command, args []string) {
             serverMatched, err1 := regexp.MatchString(HostPattern, server)
             dbMatched, err2 := regexp.MatchString(DbPattern, db)
@@ -111,10 +124,34 @@ var (
                 cobra.CheckErr(fmt.Errorf("数据库 `%s` 没有表。", serverDbConfig.Database))
             }
 
+            // Load Ignore Config
+            icMap := make(map[string]*IgnoreTable, 10)
+            if cfgPath != "" {
+                var ic *Config
+                bytes, err := os.ReadFile(cfgPath)
+                cobra.CheckErr(err)
+                err = yaml.Unmarshal(bytes, &ic)
+                cobra.CheckErr(err)
+
+                for _, vv := range ic.Ignores {
+                    icMap[vv.Table] = vv
+                }
+            }
+
             defer close(ch)
             for _, serverTable := range serverTableData {
-                wg.Add(1)
-                go NewConverter(serverDbConfig, serverDb, serverTable).Start()
+                var ignoreTable = &IgnoreTable{}
+                if v, ok := icMap[serverTable.TableName]; ok {
+                    ignoreTable = v
+                }
+                isContinue := true
+                if ignoreTable.Table == serverTable.TableName && len(ignoreTable.Columns) == 0 {
+                    isContinue = false
+                }
+                if isContinue {
+                    wg.Add(1)
+                    go NewConverter(serverDbConfig, serverDb, serverTable, ignoreTable).Start()
+                }
             }
             wg.Wait()
 

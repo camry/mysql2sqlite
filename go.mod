@@ -7,6 +7,7 @@ require (
 	github.com/camry/g v1.2.2
 	github.com/golang-module/carbon/v2 v2.2.2
 	github.com/spf13/cobra v1.6.1
+	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.4.4
 	gorm.io/gorm v1.24.1
 )
