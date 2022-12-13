@@ -58,9 +58,9 @@ var (
     server        string
     db            string
     cfgPath       string
-    existIndexMap = make(g.MapStrInt)
+    existIndexMap = make(map[string]*int32, 10)
     sqlTableNames []string
-    sqlTableMap   = make(g.MapStrStr)
+    sqlTableMap   = make(g.MapStrStr, 100)
 
     rootCmd = &cobra.Command{
         Use:     "mysql2sqlite",

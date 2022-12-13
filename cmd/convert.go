@@ -5,6 +5,7 @@ import (
     "github.com/camry/g/glog"
     "sort"
     "strings"
+    "sync/atomic"
 
     "github.com/asaskevich/govalidator"
     "github.com/camry/g/gutil"
@@ -261,15 +262,11 @@ func (c *Converter) getPrimaryKey(statisticMap map[int]Statistic) string {
 
 // createUniqueKey SQLite CREATE UNIQUE INDEX 语句。
 func (c *Converter) createUniqueKey(indexName string, statisticMap map[int]Statistic) string {
-    lock.Lock()
     if idx, ok := existIndexMap[indexName]; ok {
-        idx++
+        atomic.AddInt32(existIndexMap[indexName], 1)
         existIndexMap[indexName] = idx
         indexName = fmt.Sprintf("%s%d", indexName, idx)
-    } else {
-        existIndexMap[indexName] = 0
     }
-    lock.Unlock()
 
     var seqInIndexSort []int
     var columnNames []string
