@@ -263,9 +263,10 @@ func (c *Converter) getPrimaryKey(statisticMap map[int]Statistic) string {
 // createUniqueKey SQLite CREATE UNIQUE INDEX 语句。
 func (c *Converter) createUniqueKey(indexName string, statisticMap map[int]Statistic) string {
     if idx, ok := existIndexMap[indexName]; ok {
-        atomic.AddInt32(existIndexMap[indexName], 1)
-        existIndexMap[indexName] = idx
-        indexName = fmt.Sprintf("%s%d", indexName, idx)
+        atomic.AddInt32(idx, 1)
+        indexName = fmt.Sprintf("%s%d", indexName, atomic.LoadInt32(idx))
+    } else {
+        existIndexMap[indexName] = new(int32)
     }
 
     var seqInIndexSort []int
