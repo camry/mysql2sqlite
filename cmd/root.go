@@ -2,7 +2,6 @@ package cmd
 
 import (
     "fmt"
-    "gopkg.in/yaml.v3"
     "os"
     "regexp"
     "sort"
@@ -12,6 +11,7 @@ import (
 
     "github.com/camry/g/frame/g"
     "github.com/spf13/cobra"
+    "gopkg.in/yaml.v3"
     "gorm.io/driver/mysql"
     "gorm.io/gorm"
     "gorm.io/gorm/logger"
